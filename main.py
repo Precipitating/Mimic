@@ -1,10 +1,19 @@
-from decord import VideoReader, cpu
-
+import subprocess
+import sys
+import os
 
 
 def main():
-    input = "video_input/lol.mp4"
-    vr = VideoReader(input, ctx=cpu())
+    video_path = os.getcwd() + "/video_input/lol.mp4"
+    command = [
+        sys.executable,
+        "tools/demo/demo.py",
+        "-s",
+        f"--video={video_path}"
+    ]
+
+    subprocess.run(command, cwd='GVHMR')
+
 
 
 
