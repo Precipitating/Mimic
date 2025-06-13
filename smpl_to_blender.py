@@ -2,11 +2,14 @@ import bpy
 import numpy as np
 from mathutils import Matrix, Vector
 import pickle
+import json
+import sys
 
 #### Change the variables here
 ###############################
 smpl_model = r'C:\Users\duder\Desktop\Mimic\GVHMR\basicModel_m_lbs_10_207_0_v1.0.2.fbx'
-file = r'C:\Users\duder\Desktop\Mimic\GVHMR\outputs\demo\dansautism\hmr4d_results.pt_person-0.pkl'
+target_model = r'C:\Users\duder\Desktop\someguy.fbx'
+file = r'C:\Users\duder\Desktop\Mimic\GVHMR\outputs\demo\kick\hmr4d_results.pt_person-0.pkl'
 high_from_floor = 1.5
 ##############################
 
@@ -24,29 +27,7 @@ part_match_custom_less2 = {'root': 'root', 'bone_00': 'Pelvis', 'bone_01': 'L_Hi
                            }
 
 
-def export_fbx():
-    if "Cube" in bpy.data.objects:
-        cube = bpy.data.objects["Cube"]
-        bpy.data.objects.remove(cube, do_unlink=True)
-
-    fbx_export_path = r"C:\Users\duder\Desktop\Mimic\exported_animation.fbx"
-
-    # export the whole scene
-    bpy.ops.export_scene.fbx(
-        filepath=fbx_export_path,
-        use_selection=False,
-        apply_scale_options='FBX_SCALE_ALL',
-        bake_space_transform=True,
-        object_types={'ARMATURE', 'MESH'},
-        add_leaf_bones=False,
-        bake_anim=True,
-        bake_anim_use_all_bones=True,
-        bake_anim_use_nla_strips=False,
-        bake_anim_use_all_actions=False,
-        bake_anim_force_startend_keying=True,
-    )
-
-
+### INICIO --- Inseri para utilizar no WHAM
 def Rodrigues(rotvec):
     theta = np.linalg.norm(rotvec)
     r = (rotvec / theta).reshape(3, 1) if theta > 0. else rotvec
@@ -87,6 +68,36 @@ def get_global_pose(global_pose, arm_ob, frame=None):
     return rot_world_orig
 
 
+def export_fbx():
+    if "Cube" in bpy.data.objects:
+        cube = bpy.data.objects["Cube"]
+        bpy.data.objects.remove(cube, do_unlink=True)
+
+    if "Armature" in bpy.data.objects:
+        cube = bpy.data.objects["Armature"]
+        mesh = bpy.data.objects["m_avg"]
+        bpy.data.objects.remove(cube, do_unlink=True)
+        bpy.data.objects.remove(mesh, do_unlink=True)
+
+
+    fbx_export_path = r"C:\Users\duder\Desktop\Mimic\exported_animation.fbx"
+
+    # export the whole scene
+    bpy.ops.export_scene.fbx(
+        filepath=fbx_export_path,
+        use_selection=False,
+        apply_scale_options='FBX_SCALE_ALL',
+        bake_space_transform=True,
+        object_types={'ARMATURE', 'MESH'},
+        add_leaf_bones=False,
+        bake_anim=True,
+        bake_anim_use_all_bones=True,
+        bake_anim_use_nla_strips=False,
+        bake_anim_use_all_actions=False,
+        bake_anim_force_startend_keying=True,
+    )
+
+
 ###############
 
 # apply trans pose and shape to character
@@ -116,16 +127,14 @@ import os
 
 def init_scene(scene, params, gender='male', angle=0):
     path_fbx = smpl_model
-    bpy.ops.import_scene.fbx(filepath=path_fbx, axis_forward='-Y', axis_up='-Z',
-                             global_scale=100)  # , automatic_bone_orientation=True)
-    #    arm_obj = bpy.context.selected_objects[0]
+    bpy.ops.import_scene.fbx(filepath=path_fbx, axis_forward='-Y', axis_up='-Z', global_scale=100)
     arm_ob = bpy.context.selected_objects[0]
 
     obj_gender = 'm'
     obname = '%s_avg' % obj_gender
     ob = bpy.data.objects[obname]
-    print('success load')
 
+    print('success load')
     bpy.ops.object.select_all(action='DESELECT')
     bpy.ops.object.select_all(action='DESELECT')
     cam_ob = ''
@@ -145,11 +154,10 @@ qtd_frames = len(results['smpl_params_global']['transl'])
 print('qtd frames: ', qtd_frames)
 for fframe in range(0, qtd_frames):
     bpy.context.scene.frame_set(fframe)
-    trans = results['smpl_params_global']['transl'][fframe]
+    #trans = results['smpl_params_global']['transl'][fframe]
 
-    # stay in place
-   #trans = results['smpl_params_global']['transl'][0]
-
+    # animate in place, no translation
+    trans = results['smpl_params_global']['transl'][0]
     global_orient = results['smpl_params_global']['global_orient'][fframe]
     body_pose = results['smpl_params_global']['body_pose'][fframe]
     body_pose_fim = body_pose.reshape(int(len(body_pose) / 3), 3)
@@ -166,16 +174,48 @@ arm_ob.pose.bones['m_avg_Pelvis'].constraints.new('COPY_LOCATION')
 arm_ob.pose.bones["m_avg_Pelvis"].constraints[0].target = arm_ob
 arm_ob.pose.bones["m_avg_Pelvis"].constraints[0].subtarget = "m_avg_Pelvis"
 
-
 arm_ob.pose.bones['m_avg_Pelvis'].constraints.new('COPY_ROTATION')
 arm_ob.pose.bones["m_avg_Pelvis"].constraints[1].target = arm_ob
 arm_ob.pose.bones["m_avg_Pelvis"].constraints[1].subtarget = "m_avg_Pelvis"
 
+# load target
+target_fbx = target_model
+bpy.ops.import_scene.fbx(
+    filepath=target_fbx,
+    axis_forward='-Z',
+    axis_up='Y',  # Blender's default
+    automatic_bone_orientation=True,
+    global_scale=1.0,
+)
+
+print("Target armature loaded")
+
+# set to same pose
 for obj in bpy.data.objects:
     if obj.type == 'ARMATURE':
         obj.data.pose_position = 'REST'
 
+# use rokkoko retargeter
+bpy.context.scene.rsl_retargeting_armature_source = bpy.data.objects.get("Armature")
+bpy.context.scene.rsl_retargeting_armature_target = bpy.data.objects.get("Armature.001")
 
+argv = sys.argv
+argv = argv[argv.index("--") + 1:]
+bpy.context.scene.frame_end = int(float(argv[0]))
+print(bpy.context.scene.frame_end)
+
+selected_rig = "miaxmo.json"
+json_path = f'mappings/{selected_rig}'
+
+with open(json_path, 'r') as f:
+    bone_mappings = json.load(f)
+
+
+for source_bone, target_bone in bone_mappings:
+    item = bpy.context.scene.rsl_retargeting_bone_list.add()
+    item.bone_name_source = source_bone
+    item.bone_name_target = target_bone
+
+result = bpy.ops.rsl.retarget_animation()
 
 export_fbx()
-
