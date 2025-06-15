@@ -4,12 +4,17 @@ from mathutils import Matrix, Vector
 import pickle
 import json
 import sys
+import os
 
 #### Change the variables here
 ###############################
-smpl_model = r'C:\Users\duder\Desktop\Mimic\GVHMR\basicModel_m_lbs_10_207_0_v1.0.2.fbx'
-target_model = r'C:\Users\duder\Desktop\someguy.fbx'
-file = r'C:\Users\duder\Desktop\Mimic\GVHMR\outputs\demo\kick\hmr4d_results.pt_person-0.pkl'
+argv = sys.argv
+argv = argv[argv.index("--") + 1:]
+
+smpl_model = argv[2]
+target_model = argv[3]
+file = os.path.join(os.getcwd(),'GVHMR', 'outputs', 'demo', argv[1].rsplit('.',1)[0], 'hmr4d_results.pt_person-0.pkl')
+json_path = argv[4]
 high_from_floor = 1.5
 ##############################
 
@@ -73,12 +78,17 @@ def export_fbx():
         cube = bpy.data.objects["Cube"]
         bpy.data.objects.remove(cube, do_unlink=True)
 
+    # delete SMPL model
     if "Armature" in bpy.data.objects:
         cube = bpy.data.objects["Armature"]
         mesh = bpy.data.objects["m_avg"]
         bpy.data.objects.remove(cube, do_unlink=True)
         bpy.data.objects.remove(mesh, do_unlink=True)
 
+
+    #rename correctly so hierarchy is correct
+    for obj in bpy.data.objects:
+        obj.name = "Armature"
 
     fbx_export_path = r"C:\Users\duder\Desktop\Mimic\exported_animation.fbx"
 
@@ -184,28 +194,30 @@ bpy.ops.import_scene.fbx(
     filepath=target_fbx,
     axis_forward='-Z',
     axis_up='Y',  # Blender's default
-    automatic_bone_orientation=True,
+    automatic_bone_orientation=False,
     global_scale=1.0,
 )
 
 print("Target armature loaded")
 
-# set to same pose
+# get armatures that exist in scene, ordered by which is loaded first
+# first should be the SMPL armature
+# second should be target armature
+armatures = [obj for obj in bpy.context.scene.objects if obj.type == 'ARMATURE']
+
+# set to same pose, resting: TARGET SHOULD T POSE, else retargeting will be wrong.
 for obj in bpy.data.objects:
     if obj.type == 'ARMATURE':
         obj.data.pose_position = 'REST'
 
 # use rokkoko retargeter
-bpy.context.scene.rsl_retargeting_armature_source = bpy.data.objects.get("Armature")
-bpy.context.scene.rsl_retargeting_armature_target = bpy.data.objects.get("Armature.001")
+bpy.context.scene.rsl_retargeting_armature_source = armatures[0]
+bpy.context.scene.rsl_retargeting_armature_target = armatures[1]
 
-argv = sys.argv
-argv = argv[argv.index("--") + 1:]
+
 bpy.context.scene.frame_end = int(float(argv[0]))
 print(bpy.context.scene.frame_end)
 
-selected_rig = "miaxmo.json"
-json_path = f'mappings/{selected_rig}'
 
 with open(json_path, 'r') as f:
     bone_mappings = json.load(f)
