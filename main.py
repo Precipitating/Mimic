@@ -5,7 +5,7 @@ import flet as ft
 from flet import *
 import cv2
 
-def run_program(smpl_model_path, video_path, target_model_path, map_json_path):
+def run_program(smpl_model_path, video_path, target_model_path, map_json_path, in_place_checkbox):
     if any(None in x for x in [smpl_model_path, video_path, target_model_path, map_json_path]):
         print("Not all inputs filled")
         return
@@ -29,18 +29,19 @@ def run_program(smpl_model_path, video_path, target_model_path, map_json_path):
         video_path[0],
         smpl_model_path[1],
         target_model_path[1],
-        map_json_path[1]
+        map_json_path[1],
+        str(in_place_checkbox)
 
 
     ]
-    subprocess.run(video_to_animation, cwd='GVHMR')
+    #subprocess.run(video_to_animation, cwd='GVHMR')
     print("Converted to SMPL animation")
     subprocess.run(animation_to_blender)
 
 def main(page: ft.Page) -> None:
     page.title = "Mimic"
     page.window.width = 400
-    page.window.height = 500
+    page.window.height = 600
     page.window.resizable = False
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
@@ -85,7 +86,10 @@ def main(page: ft.Page) -> None:
                                        allowed_extensions=["fbx"]),
                                        icon= ft.Icons.FOLDER)
 
-    run_button = ElevatedButton(text= "Run", on_click= lambda _: run_program(smpl_model_path,video_file_path, target_model_path, bone_mapping_path))
+
+    in_place_checkbox = Checkbox(label= "In Place?", value=False)
+
+    run_button = ElevatedButton(text= "Run", on_click= lambda _: run_program(smpl_model_path,video_file_path, target_model_path, bone_mapping_path, in_place_checkbox.value))
 
     # file picker handler
     def on_file_selected(e: ft.FilePickerResultEvent, path, title_ref):
@@ -127,6 +131,8 @@ def main(page: ft.Page) -> None:
                 bone_mapping_picker,
                 bone_mapping_button,
 
+                ft.Divider(thickness=2),
+                in_place_checkbox,
                 ft.Divider(thickness=2),
                 run_button
 

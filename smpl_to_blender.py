@@ -15,6 +15,7 @@ smpl_model = argv[2]
 target_model = argv[3]
 file = os.path.join(os.getcwd(),'GVHMR', 'outputs', 'demo', argv[1].rsplit('.',1)[0], 'hmr4d_results.pt_person-0.pkl')
 json_path = argv[4]
+in_place_checked = argv[5]
 high_from_floor = 1.5
 ##############################
 
@@ -73,22 +74,70 @@ def get_global_pose(global_pose, arm_ob, frame=None):
     return rot_world_orig
 
 
+def delete_object(o):
+    to_delete = set()
+
+    def collect(obj):
+        to_delete.add(obj)
+        for o in bpy.data.objects:
+            if o.parent == obj:
+                collect(o)
+
+    collect(o)
+
+    # Delete all collected objects
+    for obj in to_delete:
+        bpy.data.objects.remove(obj, do_unlink=True)
+
+
+def link_animation_data(target_path, armatures_list):
+
+    # after retargeting, import a fresh target model and link their animation data
+    # this hopefully ensures that when importing to desired engine/program, it works correctly without any bone issues.
+    converted_anim = armatures_list[0]
+    target_model_clone = armatures_list[1]
+
+    print(converted_anim)
+    print(target_model_clone)
+
+    # make sure they're in POSE mode
+    bpy.ops.object.select_all(action='DESELECT')
+    for arm in armatures_list:
+        arm.data.pose_position = 'POSE'
+
+    # apply the anim data from converted_anim to target_model_clone
+    if not target_model_clone.animation_data:
+        target_model_clone.animation_data_create()
+
+    target_model_clone.animation_data.action = converted_anim.animation_data.action
+
+    # delete the source after linkage
+    delete_object(converted_anim)
+    target_model_clone.name = "Armature"
+    print("Linked successfully")
+
+
+
+
 def export_fbx():
-    if "Cube" in bpy.data.objects:
-        cube = bpy.data.objects["Cube"]
-        bpy.data.objects.remove(cube, do_unlink=True)
+    # load a copy of the target model
+    bpy.ops.import_scene.fbx(
+        filepath=target_model,
+        axis_forward='-Z',
+        axis_up='Y',  # Blender's default
+        automatic_bone_orientation=False,
+        global_scale=1.0,
+    )
 
-    # delete SMPL model
-    if "Armature" in bpy.data.objects:
-        cube = bpy.data.objects["Armature"]
-        mesh = bpy.data.objects["m_avg"]
-        bpy.data.objects.remove(cube, do_unlink=True)
-        bpy.data.objects.remove(mesh, do_unlink=True)
+    # update armatures to get updated list
+    armatures = [obj for obj in bpy.context.scene.objects if obj.type == 'ARMATURE']
 
-
-    #rename correctly so hierarchy is correct
-    for obj in bpy.data.objects:
-        obj.name = "Armature"
+    if len(armatures) < 2:
+        print("2 Armatures not found")
+    else:
+        print("2 Armatures found - linking")
+        bpy.ops.object.select_all(action='DESELECT')
+        link_animation_data(target_model, armatures)
 
     fbx_export_path = r"C:\Users\duder\Desktop\Mimic\exported_animation.fbx"
 
@@ -164,10 +213,15 @@ qtd_frames = len(results['smpl_params_global']['transl'])
 print('qtd frames: ', qtd_frames)
 for fframe in range(0, qtd_frames):
     bpy.context.scene.frame_set(fframe)
-    #trans = results['smpl_params_global']['transl'][fframe]
 
     # animate in place, no translation
-    trans = results['smpl_params_global']['transl'][0]
+    if in_place_checked == "True":
+        trans = results['smpl_params_global']['transl'][0]
+        print("IN PLACE")
+    else:
+        trans = results['smpl_params_global']['transl'][fframe]
+        print("NOT IN PLACE")
+
     global_orient = results['smpl_params_global']['global_orient'][fframe]
     body_pose = results['smpl_params_global']['body_pose'][fframe]
     body_pose_fim = body_pose.reshape(int(len(body_pose) / 3), 3)
@@ -189,9 +243,8 @@ arm_ob.pose.bones["m_avg_Pelvis"].constraints[1].target = arm_ob
 arm_ob.pose.bones["m_avg_Pelvis"].constraints[1].subtarget = "m_avg_Pelvis"
 
 # load target
-target_fbx = target_model
 bpy.ops.import_scene.fbx(
-    filepath=target_fbx,
+    filepath=target_model,
     axis_forward='-Z',
     axis_up='Y',  # Blender's default
     automatic_bone_orientation=False,
@@ -210,24 +263,32 @@ for obj in bpy.data.objects:
     if obj.type == 'ARMATURE':
         obj.data.pose_position = 'REST'
 
+
+# set frame duration of video
+bpy.context.scene.frame_end = int(float(argv[0]))
+print(bpy.context.scene.frame_end)
+
 # use rokkoko retargeter
 bpy.context.scene.rsl_retargeting_armature_source = armatures[0]
 bpy.context.scene.rsl_retargeting_armature_target = armatures[1]
 
 
-bpy.context.scene.frame_end = int(float(argv[0]))
-print(bpy.context.scene.frame_end)
-
-
 with open(json_path, 'r') as f:
     bone_mappings = json.load(f)
 
-
+# load in the bone map
 for source_bone, target_bone in bone_mappings:
     item = bpy.context.scene.rsl_retargeting_bone_list.add()
     item.bone_name_source = source_bone
     item.bone_name_target = target_bone
 
+# start retargeting
 result = bpy.ops.rsl.retarget_animation()
 
+# delete SMPL model
+if "Cube" in bpy.data.objects:
+    cube = bpy.data.objects["Cube"]
+    bpy.data.objects.remove(cube, do_unlink=True)
+
+delete_object(armatures[0])
 export_fbx()
