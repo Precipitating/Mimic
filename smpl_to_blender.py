@@ -16,6 +16,7 @@ target_model = argv[3]
 file = os.path.join(os.getcwd(),'GVHMR', 'outputs', 'demo', argv[1].rsplit('.',1)[0], 'hmr4d_results.pt_person-0.pkl')
 json_path = argv[4]
 in_place_checked = argv[5]
+output_dir = argv[6]
 high_from_floor = 1.5
 ##############################
 
@@ -139,7 +140,7 @@ def export_fbx():
         bpy.ops.object.select_all(action='DESELECT')
         link_animation_data(target_model, armatures)
 
-    fbx_export_path = r"C:\Users\duder\Desktop\Mimic\exported_animation.fbx"
+    fbx_export_path = os.path.join(output_dir,f"{argv[1].rsplit('.',1)[0]}_animation.fbx")
 
     # export the whole scene
     bpy.ops.export_scene.fbx(
@@ -160,7 +161,6 @@ def export_fbx():
 ###############
 
 # apply trans pose and shape to character
-# def apply_trans_pose_shape(trans, body_pose, shape, ob, arm_ob, obname, scene, cam_ob, frame=None):
 def apply_trans_pose_shape(trans, body_pose, arm_ob, obname, frame=None):
     mrots, bsh = rodrigues2bshapes(body_pose)
     part_bones = part_match_custom_less2
@@ -217,10 +217,8 @@ for fframe in range(0, qtd_frames):
     # animate in place, no translation
     if in_place_checked == "True":
         trans = results['smpl_params_global']['transl'][0]
-        print("IN PLACE")
     else:
         trans = results['smpl_params_global']['transl'][fframe]
-        print("NOT IN PLACE")
 
     global_orient = results['smpl_params_global']['global_orient'][fframe]
     body_pose = results['smpl_params_global']['body_pose'][fframe]

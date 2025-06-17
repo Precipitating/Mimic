@@ -1,24 +1,57 @@
 import subprocess
 import sys
-import os
 import flet as ft
 from flet import *
 import cv2
+import os
 
-def run_program(smpl_model_path, video_path, target_model_path, map_json_path, in_place_checkbox):
-    if any(None in x for x in [smpl_model_path, video_path, target_model_path, map_json_path]):
-        print("Not all inputs filled")
+def run_program(page, button, spinner, smpl_model_path, video_path, target_model_path, map_json_path, in_place_checkbox, output_dir):
+    # Error checking
+    if any(x[1] is None for x in [smpl_model_path, video_path, target_model_path, map_json_path]):
+        print("[ERROR] One or more required inputs are missing.")
         return
 
-    cap = cv2.VideoCapture(video_path[1])
-    frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-    video_to_animation = [
-        sys.executable,
-        "tools/demo/demo.py",
-        "-s",
-        f"--video={video_path[1]}"
-    ]
+    if output_dir[0] is None:
+        print("[ERROR] Output directory not set.")
+        return
 
+
+    spinner.visible = True
+    button.disabled = True
+    page.update()
+    # Construct path to pre-converted file
+    video_basename = os.path.splitext(video_path[0])[0]  # filename without extension
+    already_converted_path = os.path.join(
+        os.getcwd(), 'GVHMR', 'outputs', 'demo', video_basename, 'hmr4d_results.pt_person-0.pkl'
+    )
+
+    print(f"[INFO] Checking for existing conversion: {already_converted_path}")
+
+    # Get video frame count
+    cap = cv2.VideoCapture(video_path[1])
+    if not cap.isOpened():
+        print(f"[ERROR] Failed to open video: {video_path[1]}")
+        return
+
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+
+    # Convert video to SMPL animation if not already done
+    if not os.path.exists(already_converted_path):
+        video_to_animation = [
+            sys.executable,
+            "tools/demo/demo.py",
+            "-s",
+            f"--video={video_path[1]}"
+        ]
+
+        print("[INFO] Running video-to-animation conversion...")
+        subprocess.run(video_to_animation, cwd='GVHMR', check=True)
+        print("[INFO] Video successfully converted to SMPL animation.")
+    else:
+        print("[INFO] SMPL animation already exists. Skipping conversion.")
+
+    # Retarget animation in Blender
     animation_to_blender = [
         "blender",
         "--background",
@@ -30,23 +63,28 @@ def run_program(smpl_model_path, video_path, target_model_path, map_json_path, i
         smpl_model_path[1],
         target_model_path[1],
         map_json_path[1],
-        str(in_place_checkbox)
-
-
+        str(in_place_checkbox),
+        output_dir
     ]
-    #subprocess.run(video_to_animation, cwd='GVHMR')
-    print("Converted to SMPL animation")
-    subprocess.run(animation_to_blender)
+
+    print("[INFO] Running Blender animation retargeting...")
+    subprocess.run(animation_to_blender, check=True)
+    print("[INFO] Retargeting complete.")
+    button.disabled = False
+    spinner.visible = False
+    page.update()
 
 def main(page: ft.Page) -> None:
     page.title = "Mimic"
-    page.window.width = 400
-    page.window.height = 600
+    page.window.width = 450
+    page.window.height = 650
     page.window.resizable = False
+    page.window.maximizable = False
+    page.window.alignment = ft.alignment.center
+
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.vertical_alignment = ft.MainAxisAlignment.CENTER
     page.theme_mode = ft.ThemeMode.DARK
-
     # TITLE
     title= Text("Mimic", theme_style=ft.TextThemeStyle.TITLE_LARGE, color= ft.Colors.WHITE)
 
@@ -87,9 +125,31 @@ def main(page: ft.Page) -> None:
                                        icon= ft.Icons.FOLDER)
 
 
-    in_place_checkbox = Checkbox(label= "In Place?", value=False)
+    output_folder_text = Text("Output Folder:", size=15, color= ft.Colors.WHITE, weight=ft.FontWeight.BOLD)
+    output_folder_path = [None]
+    output_folder_picker = FilePicker(on_result= lambda e: on_dir_selected(e, output_folder_path, output_folder_text))
+    output_folder_button = ElevatedButton(text= "Choose Output Directory",
+                                          on_click= lambda _: output_folder_picker.get_directory_path(),
+                                          icon= ft.Icons.FOLDER)
 
-    run_button = ElevatedButton(text= "Run", on_click= lambda _: run_program(smpl_model_path,video_file_path, target_model_path, bone_mapping_path, in_place_checkbox.value))
+
+    in_place_checkbox_component = ft.Checkbox(label="In Place?", value=False)
+    in_place_checkbox = Row([in_place_checkbox_component], alignment=MainAxisAlignment.CENTER)
+
+    run_button = ElevatedButton(text= "Run", on_click= lambda e: run_program(page,
+                                                                             run_button,
+                                                                             spinner,
+                                                                             smpl_model_path,
+                                                                             video_file_path,
+                                                                             target_model_path,
+                                                                             bone_mapping_path,
+                                                                             in_place_checkbox_component.value,
+                                                                             output_folder_path[0]))
+
+    spinner = ft.ProgressRing(height= 25, width = 25, visible = False)
+    spinner_formatted = Container(content=Column([spinner],
+                                                 horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        padding= padding.only(top=10))
 
     # file picker handler
     def on_file_selected(e: ft.FilePickerResultEvent, path, title_ref):
@@ -101,6 +161,19 @@ def main(page: ft.Page) -> None:
             title_ref.color = ft.Colors.GREEN
         else:
             if path is None:
+                print("No path selected")
+                title_ref.color = ft.Colors.RED
+
+        page.update()
+
+    # directory picker handler
+    def on_dir_selected(e: ft.FilePickerResultEvent, path_store, title_ref):
+        if e.path:
+            path_store[0] = e.path
+            print(e.path)
+            title_ref.color = ft.Colors.GREEN
+        else:
+            if path_store[0] is None:
                 print("No path selected")
                 title_ref.color = ft.Colors.RED
 
@@ -131,10 +204,18 @@ def main(page: ft.Page) -> None:
                 bone_mapping_picker,
                 bone_mapping_button,
 
+                output_folder_text,
+                output_folder_picker,
+                output_folder_button,
+
                 ft.Divider(thickness=2),
                 in_place_checkbox,
                 ft.Divider(thickness=2),
-                run_button
+                run_button,
+
+                spinner_formatted
+
+
 
 
              ],
@@ -152,14 +233,9 @@ def main(page: ft.Page) -> None:
 
     )
 
+
+
     page.add(main_container)
-
-
-
-
-
-
-
 
 
 
