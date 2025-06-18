@@ -1,5 +1,12 @@
 # Basic automation of video to 3D animation of your chosen rig, based on GVHMR, using Flet GUI
-![image](https://github.com/user-attachments/assets/3f894ea4-b4f4-4020-9c36-6f5833e5cd8d)
+![image](https://github.com/user-attachments/assets/3f894ea4-b4f4-4020-9c36-6f5833e5cd8d)\
+SMPL Model - Generic one provided in release (fbx)\
+Input video - Video to mimic - one person only \
+Target model - The custom rig (fbx/obj) \
+Bone map - json file of the SMPL -> custom rig mapping - example below \
+Output folder - Directory you want the converted animation to be (fbx) \
+In place - Animation moves around or stay in place
+
 
 
 ## Prerequisites
