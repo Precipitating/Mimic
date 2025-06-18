@@ -8,7 +8,7 @@
 
 ---
 
-## Packages required:
+## Packages required (setup.bat does this automatically, place in same folder as exe):
 
 ```bash
 conda install pytorch==2.3.0 torchvision==0.18.0 torchaudio==2.3.0 pytorch-cuda=12.1 -c pytorch -c nvidia
