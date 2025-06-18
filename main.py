@@ -5,32 +5,54 @@ from flet import *
 import cv2
 import os
 
-def run_program(page, button, spinner, smpl_model_path, video_path, target_model_path, map_json_path, in_place_checkbox, output_dir):
+# MEIPASS is working dir when using Pyinstaller EXE so use that path.
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+# absolute path since GVHMR is not going to be bundled with pyinstaller due to various issues
+def base_path():
+    """Get path where the EXE is located (even when bundled)."""
+    return os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__)
+
+def run_program(debug_text, page, button, spinner, smpl_model_path, video_path, target_model_path, map_json_path, in_place_checkbox, output_dir):
     # Error checking
     if any(x[1] is None for x in [smpl_model_path, video_path, target_model_path, map_json_path]):
         print("[ERROR] One or more required inputs are missing.")
+        debug_text.value = "[ERROR] One or more required inputs are missing."
+        page.update()
         return
 
-    if output_dir[0] is None:
+    if output_dir is None:
         print("[ERROR] Output directory not set.")
+        debug_text.value = "[ERROR] Output directory not set."
+        page.update()
         return
 
 
     spinner.visible = True
     button.disabled = True
-    page.update()
+
     # Construct path to pre-converted file
     video_basename = os.path.splitext(video_path[0])[0]  # filename without extension
     already_converted_path = os.path.join(
-        os.getcwd(), 'GVHMR', 'outputs', 'demo', video_basename, 'hmr4d_results.pt_person-0.pkl'
+        base_path(), 'GVHMR', 'outputs', 'demo', video_basename, 'hmr4d_results.pt_person-0.pkl'
     )
 
     print(f"[INFO] Checking for existing conversion: {already_converted_path}")
+    debug_text.value = f"[INFO] Checking for existing conversion: {already_converted_path}"
+    page.update()
 
     # Get video frame count
     cap = cv2.VideoCapture(video_path[1])
     if not cap.isOpened():
         print(f"[ERROR] Failed to open video: {video_path[1]}")
+        debug_text.value = f"[ERROR] Failed to open video: {video_path[1]}"
+        page.update()
         return
 
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -39,24 +61,38 @@ def run_program(page, button, spinner, smpl_model_path, video_path, target_model
     # Convert video to SMPL animation if not already done
     if not os.path.exists(already_converted_path):
         video_to_animation = [
-            sys.executable,
-            "tools/demo/demo.py",
+            "python",
+            os.path.join(base_path(),"GVHMR" ,"tools", "demo", "demo.py"),
             "-s",
             f"--video={video_path[1]}"
         ]
 
         print("[INFO] Running video-to-animation conversion...")
-        subprocess.run(video_to_animation, cwd='GVHMR', check=True)
+        debug_text.value = "[INFO] Running video-to-animation conversion..."
+        page.update()
+
+        try:
+            subprocess.run(video_to_animation,cwd=os.path.join(base_path(), "GVHMR"), check=True)
+        except Exception as e:
+            debug_text.value = "ERROR"
+            button.disabled = False
+            spinner.visible = False
+            return
+
         print("[INFO] Video successfully converted to SMPL animation.")
+        debug_text.value = "[INFO] Video successfully converted to SMPL animation."
+        page.update()
     else:
         print("[INFO] SMPL animation already exists. Skipping conversion.")
+        debug_text.value = "[INFO] SMPL animation already exists. Skipping conversion."
+        page.update()
 
     # Retarget animation in Blender
     animation_to_blender = [
         "blender",
         "--background",
         "--python",
-        "smpl_to_blender.py",
+        resource_path("smpl_to_blender.py"),
         "--",
         str(frame_count),
         video_path[0],
@@ -67,8 +103,12 @@ def run_program(page, button, spinner, smpl_model_path, video_path, target_model
         output_dir
     ]
 
+    debug_text.value = "[INFO] Running Blender animation retargeting..."
+    page.update()
     print("[INFO] Running Blender animation retargeting...")
     subprocess.run(animation_to_blender, check=True)
+    debug_text.value = "[INFO] Retargeting complete."
+    page.update()
     print("[INFO] Retargeting complete.")
     button.disabled = False
     spinner.visible = False
@@ -77,7 +117,7 @@ def run_program(page, button, spinner, smpl_model_path, video_path, target_model
 def main(page: ft.Page) -> None:
     page.title = "Mimic"
     page.window.width = 450
-    page.window.height = 650
+    page.window.height = 670
     page.window.resizable = False
     page.window.maximizable = False
     page.window.alignment = ft.alignment.center
@@ -104,7 +144,7 @@ def main(page: ft.Page) -> None:
     target_model_button = ElevatedButton(text= "Choose Model",
                                          on_click= lambda _: target_model_picker.pick_files(
                                          allow_multiple=False,
-                                         allowed_extensions=["fbx"]),
+                                         allowed_extensions=["fbx","obj"]),
                                          icon= ft.Icons.FOLDER)
     bone_mapping_input = Text("Bone Map:", size=15, color= ft.Colors.WHITE, weight=ft.FontWeight.BOLD)
     bone_mapping_path = [None, None]
@@ -133,10 +173,12 @@ def main(page: ft.Page) -> None:
                                           icon= ft.Icons.FOLDER)
 
 
-    in_place_checkbox_component = ft.Checkbox(label="In Place?", value=False)
+    in_place_checkbox_component = Checkbox(label="In Place?", value=False)
     in_place_checkbox = Row([in_place_checkbox_component], alignment=MainAxisAlignment.CENTER)
 
-    run_button = ElevatedButton(text= "Run", on_click= lambda e: run_program(page,
+    run_button = ElevatedButton(text= "Run", on_click= lambda e: run_program(
+                                                                             error_text,
+                                                                             page,
                                                                              run_button,
                                                                              spinner,
                                                                              smpl_model_path,
@@ -146,7 +188,11 @@ def main(page: ft.Page) -> None:
                                                                              in_place_checkbox_component.value,
                                                                              output_folder_path[0]))
 
-    spinner = ft.ProgressRing(height= 25, width = 25, visible = False)
+
+
+    error_text = Text("Ready",visible=True, color = Colors.RED)
+
+    spinner = ProgressRing(height= 25, width = 25, visible= False)
     spinner_formatted = Container(content=Column([spinner],
                                                  horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                         padding= padding.only(top=10))
@@ -212,8 +258,8 @@ def main(page: ft.Page) -> None:
                 in_place_checkbox,
                 ft.Divider(thickness=2),
                 run_button,
-
-                spinner_formatted
+                spinner_formatted,
+                error_text
 
 
 

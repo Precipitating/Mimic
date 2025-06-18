@@ -161,6 +161,11 @@ cython_debug/
 
 # Flet
 storage/
+GVHMR/
+.idea/workspace.xml
+outputs/demo/dansautism/0_input_video.mp4
+outputs/demo/dansautism/preprocess/bbx.pt
 .idea/
-video_input/
-exported_animation.fbx
+outputs/demo/depewssed/0_input_video.mp4
+outputs/demo/depewssed/preprocess/bbx.pt
+basicModel_m_lbs_10_207_0_v1.0.2.fbx
