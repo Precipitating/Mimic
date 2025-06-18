@@ -75,6 +75,7 @@ def get_global_pose(global_pose, arm_ob, frame=None):
     return rot_world_orig
 
 
+""" Attempts to emulate delete hierarchy by deleting the specified model and everything in its hierarchy """
 def delete_object(o):
     to_delete = set()
 
@@ -91,7 +92,14 @@ def delete_object(o):
         bpy.data.objects.remove(obj, do_unlink=True)
 
 
-def link_animation_data(target_path, armatures_list):
+"""
+Links animation data from the retargeted target model to the new cloned target model
+This fixes issues with the retargeted model having skeletal/bone issues, and linking the animation data 
+to the clean clone fixes this.
+Args:
+    armatures_list (ft.Text):   List of armatures in the scene. SHOULD BE 2 - retargeted armature & new clone of target model
+"""
+def link_animation_data(armatures_list):
 
     # after retargeting, import a fresh target model and link their animation data
     # this hopefully ensures that when importing to desired engine/program, it works correctly without any bone issues.
@@ -119,7 +127,9 @@ def link_animation_data(target_path, armatures_list):
 
 
 
-
+"""
+Responsible for linking animation data from retargeted rig -> cloned rig and exporting the cloned rig as FBX.
+"""
 def export_fbx():
     # load a copy of the target model
     bpy.ops.import_scene.fbx(
@@ -135,14 +145,17 @@ def export_fbx():
 
     if len(armatures) < 2:
         print("2 Armatures not found")
+        return
     else:
         print("2 Armatures found - linking")
         bpy.ops.object.select_all(action='DESELECT')
-        link_animation_data(target_model, armatures)
+        # create a copy of the target model and transfer the retargeted animation data to it
+        link_animation_data(armatures)
 
+    # create the output file path
     fbx_export_path = os.path.join(output_dir,f"{argv[1].rsplit('.',1)[0]}_animation.fbx")
 
-    # export the whole scene
+    # export the armature and mesh
     bpy.ops.export_scene.fbx(
         filepath=fbx_export_path,
         use_selection=False,
@@ -158,6 +171,65 @@ def export_fbx():
     )
 
 
+"""
+Responsible for retargeting the SMPL armature to the target model armature.
+1. Loads the target model and sets both armatures to REST pose (should both be T POSE, else issues)
+2. Sets the frame duration which is calculated via the frame count of the video input
+3. Uses rokoko retarget tool to retarget the animation from SMPL -> target model, using the mappings provided by user
+4. Deletes the SMPL model and any other default objects, leaving only the retargeted armature
+5. Calls export_fbx to handle animation linking and exporting.
+Args:
+    armatures_list (ft.Text):   List of armatures in the scene. SHOULD BE 2 - retargeted armature & new clone of target model
+"""
+def blender_convert():
+    # load target
+    bpy.ops.import_scene.fbx(
+        filepath=target_model,
+        axis_forward='-Z',
+        axis_up='Y',  # Blender's default
+        automatic_bone_orientation=False,
+        global_scale=1.0,
+    )
+
+    print("Target armature loaded")
+
+    # get armatures that exist in scene, ordered by which is loaded first
+    # first should be the SMPL armature
+    # second should be target armature
+    armatures = [obj for obj in bpy.context.scene.objects if obj.type == 'ARMATURE']
+
+    # set to same pose, resting: TARGET SHOULD T POSE, else retargeting will be wrong.
+    for obj in bpy.data.objects:
+        if obj.type == 'ARMATURE':
+            obj.data.pose_position = 'REST'
+
+    # set frame duration of video
+    bpy.context.scene.frame_end = int(float(argv[0]))
+    print(bpy.context.scene.frame_end)
+
+    # use rokkoko retargeter
+    bpy.context.scene.rsl_retargeting_armature_source = armatures[0]
+    bpy.context.scene.rsl_retargeting_armature_target = armatures[1]
+
+    with open(json_path, 'r') as f:
+        bone_mappings = json.load(f)
+
+    # load in the bone map
+    for source_bone, target_bone in bone_mappings:
+        item = bpy.context.scene.rsl_retargeting_bone_list.add()
+        item.bone_name_source = source_bone
+        item.bone_name_target = target_bone
+
+    # start retargeting
+    bpy.ops.rsl.retarget_animation()
+
+    # delete SMPL model and any default objects
+    if "Cube" in bpy.data.objects:
+        cube = bpy.data.objects["Cube"]
+        bpy.data.objects.remove(cube, do_unlink=True)
+
+    delete_object(armatures[0])
+    export_fbx()
 ###############
 
 # apply trans pose and shape to character
@@ -240,53 +312,5 @@ arm_ob.pose.bones['m_avg_Pelvis'].constraints.new('COPY_ROTATION')
 arm_ob.pose.bones["m_avg_Pelvis"].constraints[1].target = arm_ob
 arm_ob.pose.bones["m_avg_Pelvis"].constraints[1].subtarget = "m_avg_Pelvis"
 
-# load target
-bpy.ops.import_scene.fbx(
-    filepath=target_model,
-    axis_forward='-Z',
-    axis_up='Y',  # Blender's default
-    automatic_bone_orientation=False,
-    global_scale=1.0,
-)
-
-print("Target armature loaded")
-
-# get armatures that exist in scene, ordered by which is loaded first
-# first should be the SMPL armature
-# second should be target armature
-armatures = [obj for obj in bpy.context.scene.objects if obj.type == 'ARMATURE']
-
-# set to same pose, resting: TARGET SHOULD T POSE, else retargeting will be wrong.
-for obj in bpy.data.objects:
-    if obj.type == 'ARMATURE':
-        obj.data.pose_position = 'REST'
-
-
-# set frame duration of video
-bpy.context.scene.frame_end = int(float(argv[0]))
-print(bpy.context.scene.frame_end)
-
-# use rokkoko retargeter
-bpy.context.scene.rsl_retargeting_armature_source = armatures[0]
-bpy.context.scene.rsl_retargeting_armature_target = armatures[1]
-
-
-with open(json_path, 'r') as f:
-    bone_mappings = json.load(f)
-
-# load in the bone map
-for source_bone, target_bone in bone_mappings:
-    item = bpy.context.scene.rsl_retargeting_bone_list.add()
-    item.bone_name_source = source_bone
-    item.bone_name_target = target_bone
-
-# start retargeting
-result = bpy.ops.rsl.retarget_animation()
-
-# delete SMPL model
-if "Cube" in bpy.data.objects:
-    cube = bpy.data.objects["Cube"]
-    bpy.data.objects.remove(cube, do_unlink=True)
-
-delete_object(armatures[0])
-export_fbx()
+# after converting to blender, retarget to new rig
+blender_convert()
