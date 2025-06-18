@@ -1,81 +1,36 @@
-# Mimic app
+## Prerequisites
 
-## Run the app
+- **Blender 3.4** — Add the exe folder to your `PATH`  
+- **CUDA 12.1** — Add to your `PATH`  
+- **Rokoko's Blender plugin** — Installed  
+- **Python 3.10**
 
-### uv
+---
 
-Run as a desktop app:
+## Packages required:
 
+```bash
+conda install pytorch==2.3.0 torchvision==0.18.0 torchaudio==2.3.0 pytorch-cuda=12.1 -c pytorch -c nvidia
+OR
+pip install torch==2.3.0+cu121 torchvision==0.18.0+cu121 torchaudio==2.3.0 --extra-index-url https://download.pytorch.org/whl/cu121
 ```
-uv run flet run
+```bash
+conda install -c fvcore -c iopath -c conda-forge fvcore iopath
+OR
+pip install fvcore iopath
 ```
+# In the GVHMR folder, install the requirements:
+pip install -r requirements.txt
 
-Run as a web app:
+# Ensure the 'av' package is version 13.0.0:
+pip install av==13.0.0
 
-```
-uv run flet run --web
-```
+# Inside the GVHMR folder, run:
+pip install -e .
 
-### Poetry
+# Then, go inside the python3d folder and run:
+python setup.py install
 
-Install dependencies from `pyproject.toml`:
 
-```
-poetry install
-```
 
-Run as a desktop app:
 
-```
-poetry run flet run
-```
-
-Run as a web app:
-
-```
-poetry run flet run --web
-```
-
-For more details on running the app, refer to the [Getting Started Guide](https://flet.dev/docs/getting-started/).
-
-## Build the app
-
-### Android
-
-```
-flet build apk -v
-```
-
-For more details on building and signing `.apk` or `.aab`, refer to the [Android Packaging Guide](https://flet.dev/docs/publish/android/).
-
-### iOS
-
-```
-flet build ipa -v
-```
-
-For more details on building and signing `.ipa`, refer to the [iOS Packaging Guide](https://flet.dev/docs/publish/ios/).
-
-### macOS
-
-```
-flet build macos -v
-```
-
-For more details on building macOS package, refer to the [macOS Packaging Guide](https://flet.dev/docs/publish/macos/).
-
-### Linux
-
-```
-flet build linux -v
-```
-
-For more details on building Linux package, refer to the [Linux Packaging Guide](https://flet.dev/docs/publish/linux/).
-
-### Windows
-
-```
-flet build windows -v
-```
-
-For more details on building Windows package, refer to the [Windows Packaging Guide](https://flet.dev/docs/publish/windows/).
