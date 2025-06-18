@@ -1,4 +1,7 @@
 # Basic automation of video to 3D animation of your chosen rig, based on GVHMR, using Flet GUI
+![image](https://github.com/user-attachments/assets/3f894ea4-b4f4-4020-9c36-6f5833e5cd8d)
+
+
 ## Prerequisites
 
 - **Blender 3.4** — Add the exe folder to your `PATH`  
